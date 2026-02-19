@@ -57,6 +57,8 @@ async function loadAllData() {
       .select('*')
       .order('id', { ascending: true });
 
+    console.log('📊 sentencesData:', sentencesData, 'error:', sentencesError);
+
     if (sentencesError) throw sentencesError;
 
     // 2. folders 로드
@@ -65,12 +67,16 @@ async function loadAllData() {
       .select('*')
       .order('id', { ascending: true });
 
+    console.log('📂 foldersData:', foldersData, 'error:', foldersError);
+
     if (foldersError) throw foldersError;
 
     // 3. sentence_folders 로드 (관계)
     const { data: sentenceFoldersData, error: relError } = await AppState.supabase
       .from('sentence_folders')
       .select('*');
+
+    console.log('🔗 sentenceFoldersData:', sentenceFoldersData, 'error:', relError);
 
     if (relError) throw relError;
 
