@@ -86,7 +86,7 @@ async function loadAllData() {
 
     const processedFolders = (foldersData || []).map(row => ({
       id: row.id,
-      name: row.name || ''
+      name: row.id  // id가 폴더 이름으로 사용됨
     }));
 
     // 상태 업데이트
