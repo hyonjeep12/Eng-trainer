@@ -243,6 +243,7 @@ function renderFolders() {
       <span class="folder-icon">📁</span>
       <span>${escapeHtml(folder.name)}</span>
       <span style="font-size: 12px; margin-left: auto; color: #999;">${count}</span>
+      <button class="folder-delete-btn" onclick="event.stopPropagation(); deleteFolder('${folder.id}');" title="폴더 삭제">🗑️</button>
     `;
     folderList.appendChild(folderItem);
   });
@@ -412,6 +413,59 @@ async function toggleFolderForSentence(folderId) {
   renderFolders();
   renderSentences();
   openFolderModal(currentSentenceForFolder);
+}
+
+// ===== 폴더 삭제 =====
+async function deleteFolder(folderId) {
+  const folder = AppState.folders.find(f => f.id === folderId);
+  if (!folder) return;
+
+  if (!confirm(`"${folder.name}" 폴더를 삭제하시겠습니까? 폴더 내의 문장은 유지됩니다.`)) {
+    return;
+  }
+
+  try {
+    // 1. sentence_folders에서 이 폴더를 참조하는 모든 레코드 삭제
+    const { error: deleteRelError } = await AppState.supabase
+      .from('sentence_folders')
+      .delete()
+      .eq('folder_id', folderId);
+
+    if (deleteRelError) throw deleteRelError;
+
+    // 2. folders 테이블에서 폴더 삭제
+    const { error: deleteFolderError } = await AppState.supabase
+      .from('folders')
+      .delete()
+      .eq('id', folderId);
+
+    if (deleteFolderError) throw deleteFolderError;
+
+    // 3. 로컬 상태 업데이트
+    AppState.folders = AppState.folders.filter(f => f.id !== folderId);
+
+    // 각 문장에서 이 폴더 참조 제거
+    AppState.sentences.forEach(sentence => {
+      const index = sentence.folders.indexOf(folderId);
+      if (index > -1) {
+        sentence.folders.splice(index, 1);
+      }
+    });
+
+    // 삭제한 폴더가 현재 선택된 폴더면 전체로 변경
+    if (AppState.currentFolder === folderId) {
+      AppState.currentFolder = 'all';
+    }
+
+    console.log('✅ 폴더 삭제:', folderId);
+
+    // UI 업데이트
+    renderFolders();
+    renderSentences();
+  } catch (error) {
+    console.error('❌ 폴더 삭제 오류:', error);
+    alert('폴더 삭제 실패: ' + error.message);
+  }
 }
 
 // ===== 새 폴더 생성 모달 =====
