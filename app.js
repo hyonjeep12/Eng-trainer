@@ -1,44 +1,58 @@
 // ===== Supabase 초기화 =====
 const SUPABASE_URL = 'https://gwitlriweyvbkodmzaji.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_FTdFkCz4e2g30OQ6yvyHNQ_bUkb4hha';
-let supabase = null;
 
-// Supabase 클라이언트 안전하게 초기화
-if (typeof window.supabase !== 'undefined') {
-  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-} else {
-  console.error('❌ Supabase 라이브러리가 로드되지 않았습니다');
+// Supabase 클라이언트 (전역)
+const AppState = {
+  supabase: null,
+  sentences: [],
+  folders: [],
+  currentFolder: 'all',
+  currentSearchQuery: '',
+  currentlyPlayingId: null,
+  expandedEnglish: {},
+  isLoading: true
+};
+
+// Supabase 초기화
+function initSupabase() {
+  if (typeof window.supabase !== 'undefined' && !AppState.supabase) {
+    AppState.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log('✅ Supabase 클라이언트 초기화됨');
+  } else if (!AppState.supabase) {
+    console.error('❌ Supabase 라이브러리가 로드되지 않았습니다');
+  }
 }
 
-// ===== 전역 데이터 =====
-let sentences = [];
-let folders = [];
-let currentFolder = 'all';
-let currentSearchQuery = '';
-let currentlyPlayingId = null;
-let expandedEnglish = {};
-let isLoading = true;
+// 변수 단축 (편의상)
+let {supabase, sentences, folders, currentFolder, currentSearchQuery, currentlyPlayingId, expandedEnglish} = AppState;
+
+function updateState(updates) {
+  Object.assign(AppState, updates);
+  ({supabase, sentences, folders, currentFolder, currentSearchQuery, currentlyPlayingId, expandedEnglish} = AppState);
+}
 
 // ===== 초기화 =====
 window.addEventListener('load', async () => {
+  initSupabase();
   await loadAllData();
   renderFolders();
   renderSentences();
   setupEventListeners();
-  isLoading = false;
+  AppState.isLoading = false;
   console.log('✅ 앱 초기화 완료');
 });
 
 // ===== Supabase에서 모든 데이터 로드 =====
 async function loadAllData() {
-  if (!supabase) {
+  if (!AppState.supabase) {
     console.error('❌ Supabase가 초기화되지 않았습니다');
     return;
   }
 
   try {
     // 1. sentences 로드
-    const { data: sentencesData, error: sentencesError } = await supabase
+    const { data: sentencesData, error: sentencesError } = await AppState.supabase
       .from('sentences')
       .select('*')
       .order('id', { ascending: true });
@@ -46,7 +60,7 @@ async function loadAllData() {
     if (sentencesError) throw sentencesError;
 
     // 2. folders 로드
-    const { data: foldersData, error: foldersError } = await supabase
+    const { data: foldersData, error: foldersError } = await AppState.supabase
       .from('folders')
       .select('*')
       .order('id', { ascending: true });
@@ -54,14 +68,14 @@ async function loadAllData() {
     if (foldersError) throw foldersError;
 
     // 3. sentence_folders 로드 (관계)
-    const { data: sentenceFoldersData, error: relError } = await supabase
+    const { data: sentenceFoldersData, error: relError } = await AppState.supabase
       .from('sentence_folders')
       .select('*');
 
     if (relError) throw relError;
 
     // 4. 데이터 정리
-    sentences = (sentencesData || []).map(row => ({
+    const processedSentences = (sentencesData || []).map(row => ({
       id: row.id,
       korean: row.korean || '',
       english: row.english || '',
@@ -70,18 +84,24 @@ async function loadAllData() {
         .map(rel => rel.folder_id)
     }));
 
-    folders = (foldersData || []).map(row => ({
+    const processedFolders = (foldersData || []).map(row => ({
       id: row.id,
       name: row.name || ''
     }));
 
+    // 상태 업데이트
+    updateState({
+      sentences: processedSentences,
+      folders: processedFolders
+    });
+
     // localStorage에서 확장 상태 복원
     const saved = localStorage.getItem('expandedEnglish');
     if (saved) {
-      expandedEnglish = JSON.parse(saved);
+      AppState.expandedEnglish = JSON.parse(saved);
     }
 
-    console.log(`✅ Supabase 데이터 로드: ${sentences.length}개 문장, ${folders.length}개 폴더`);
+    console.log(`✅ Supabase 데이터 로드: ${processedSentences.length}개 문장, ${processedFolders.length}개 폴더`);
   } catch (error) {
     console.error('❌ 데이터 로드 오류:', error);
     alert('데이터를 불러올 수 없습니다: ' + error.message);
@@ -90,9 +110,11 @@ async function loadAllData() {
 
 // ===== Supabase에 문장 저장 =====
 async function saveSentence(sentence) {
+  if (!AppState.supabase) return;
+  
   try {
     // 1. sentences 테이블에 저장
-    const { data: savedSentence, error: sentenceError } = await supabase
+    const { data: savedSentence, error: sentenceError } = await AppState.supabase
       .from('sentences')
       .upsert({
         id: sentence.id,
@@ -104,7 +126,7 @@ async function saveSentence(sentence) {
     if (sentenceError) throw sentenceError;
 
     // 2. 기존 sentence_folders 삭제
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await AppState.supabase
       .from('sentence_folders')
       .delete()
       .eq('sentence_id', sentence.id);
@@ -118,7 +140,7 @@ async function saveSentence(sentence) {
         folder_id: folderId
       }));
 
-      const { error: insertError } = await supabase
+      const { error: insertError } = await AppState.supabase
         .from('sentence_folders')
         .insert(folderRelations);
 
@@ -134,8 +156,10 @@ async function saveSentence(sentence) {
 
 // ===== Supabase에 폴더 저장 =====
 async function saveFolder(folder) {
+  if (!AppState.supabase) return;
+  
   try {
-    const { data, error } = await supabase
+    const { data, error } = await AppState.supabase
       .from('folders')
       .upsert({
         id: folder.id,
@@ -187,9 +211,9 @@ function renderFolders() {
   const folderList = document.getElementById('folderList');
   folderList.innerHTML = '';
 
-  folders.forEach(folder => {
-    const count = sentences.filter(s => s.folders.includes(folder.id)).length;
-    const isActive = currentFolder === folder.id;
+  AppState.folders.forEach(folder => {
+    const count = AppState.sentences.filter(s => s.folders.includes(folder.id)).length;
+    const isActive = AppState.currentFolder === folder.id;
 
     const folderItem = document.createElement('div');
     folderItem.className = `folder-item ${isActive ? 'active' : ''}`;
@@ -205,8 +229,8 @@ function renderFolders() {
 
 // ===== 폴더 필터링 =====
 function filterByFolder(folderId) {
-  currentFolder = folderId;
-  currentSearchQuery = '';
+  AppState.currentFolder = folderId;
+  AppState.currentSearchQuery = '';
   document.getElementById('searchInput').value = '';
 
   // 사이드패널에서 활성 상태 업데이트
@@ -227,16 +251,16 @@ function filterByFolder(folderId) {
 
 // ===== 문장 필터링 =====
 function getFilteredSentences() {
-  let filtered = sentences;
+  let filtered = AppState.sentences;
 
   // 폴더 필터링
-  if (currentFolder !== 'all') {
-    filtered = filtered.filter(s => s.folders.includes(currentFolder));
+  if (AppState.currentFolder !== 'all') {
+    filtered = filtered.filter(s => s.folders.includes(AppState.currentFolder));
   }
 
   // 검색 필터링
-  if (currentSearchQuery.trim()) {
-    const query = currentSearchQuery.toLowerCase();
+  if (AppState.currentSearchQuery.trim()) {
+    const query = AppState.currentSearchQuery.toLowerCase();
     filtered = filtered.filter(s =>
       s.korean.toLowerCase().includes(query) ||
       s.english.toLowerCase().includes(query)
@@ -256,7 +280,7 @@ function renderSentences() {
       <div class="empty-state">
         <div class="empty-icon">🔍</div>
         <div class="empty-text">
-          ${currentSearchQuery ? '검색 결과가 없습니다' : '폴더에 문장이 없습니다'}
+          ${AppState.currentSearchQuery ? '검색 결과가 없습니다' : '폴더에 문장이 없습니다'}
         </div>
       </div>
     `;
@@ -269,7 +293,7 @@ function renderSentences() {
 
       <div class="sentence-actions">
         <button class="toggle-btn" onclick="toggleEnglish(${sentence.id})">
-          <span>${expandedEnglish[sentence.id] ? '▼ 영어 숨기기' : '▶ 영어 보기'}</span>
+          <span>${AppState.expandedEnglish[sentence.id] ? '▼ 영어 숨기기' : '▶ 영어 보기'}</span>
         </button>
         <button class="tts-btn" onclick="speakEnglish(${sentence.id})" title="발음 듣기">
           🔊
@@ -279,7 +303,7 @@ function renderSentences() {
         </button>
       </div>
 
-      <div class="english-text ${expandedEnglish[sentence.id] ? '' : 'english-hidden'}">
+      <div class="english-text ${AppState.expandedEnglish[sentence.id] ? '' : 'english-hidden'}">
         ${escapeHtml(sentence.english)}
       </div>
     </div>
@@ -288,18 +312,18 @@ function renderSentences() {
 
 // ===== 영어 보기 토글 =====
 function toggleEnglish(sentenceId) {
-  expandedEnglish[sentenceId] = !expandedEnglish[sentenceId];
-  localStorage.setItem('expandedEnglish', JSON.stringify(expandedEnglish));
+  AppState.expandedEnglish[sentenceId] = !AppState.expandedEnglish[sentenceId];
+  localStorage.setItem('expandedEnglish', JSON.stringify(AppState.expandedEnglish));
   renderSentences();
 }
 
 // ===== TTS 발음 듣기 =====
 function speakEnglish(sentenceId) {
-  const sentence = sentences.find(s => s.id === sentenceId);
+  const sentence = AppState.sentences.find(s => s.id === sentenceId);
   if (!sentence) return;
 
   // 기존 재생 중지
-  if (currentlyPlayingId !== null && currentlyPlayingId !== sentenceId) {
+  if (AppState.currentlyPlayingId !== null && AppState.currentlyPlayingId !== sentenceId) {
     speechSynthesis.cancel();
   }
 
@@ -309,11 +333,11 @@ function speakEnglish(sentenceId) {
   utterance.pitch = 1.0;
 
   utterance.onstart = () => {
-    currentlyPlayingId = sentenceId;
+    AppState.currentlyPlayingId = sentenceId;
   };
 
   utterance.onend = () => {
-    currentlyPlayingId = null;
+    AppState.currentlyPlayingId = null;
   };
 
   speechSynthesis.speak(utterance);
@@ -321,7 +345,7 @@ function speakEnglish(sentenceId) {
 
 // ===== 검색 기능 =====
 function handleSearch() {
-  currentSearchQuery = document.getElementById('searchInput').value;
+  AppState.currentSearchQuery = document.getElementById('searchInput').value;
   renderSentences();
 }
 
@@ -333,8 +357,8 @@ function openFolderModal(sentenceId) {
   const modalOverlay = document.getElementById('folderModal');
   const folderListModal = document.getElementById('folderListModal');
 
-  const sentence = sentences.find(s => s.id === sentenceId);
-  folderListModal.innerHTML = folders.map(folder => {
+  const sentence = AppState.sentences.find(s => s.id === sentenceId);
+  folderListModal.innerHTML = AppState.folders.map(folder => {
     const isChecked = sentence.folders.includes(folder.id);
     return `
       <div class="folder-check-item" onclick="toggleFolderForSentence(${folder.id})">
@@ -350,7 +374,7 @@ function openFolderModal(sentenceId) {
 }
 
 async function toggleFolderForSentence(folderId) {
-  const sentence = sentences.find(s => s.id === currentSentenceForFolder);
+  const sentence = AppState.sentences.find(s => s.id === currentSentenceForFolder);
   if (!sentence) return;
 
   const index = sentence.folders.indexOf(folderId);
@@ -394,7 +418,7 @@ async function createNewFolder() {
 
   try {
     // Supabase에 새 폴더 생성
-    const { data, error } = await supabase
+    const { data, error } = await AppState.supabase
       .from('folders')
       .insert({ name: folderName })
       .select();
@@ -403,7 +427,7 @@ async function createNewFolder() {
 
     // 로컬 폴더 목록에 추가
     const newFolder = data[0];
-    folders.push(newFolder);
+    AppState.folders.push(newFolder);
 
     console.log('✅ 폴더 생성:', folderName);
 
@@ -451,5 +475,5 @@ document.addEventListener('click', (e) => {
 // ===== 백그라운드에서 탭 전환 시 음성 생성 중지 =====
 window.addEventListener('blur', () => {
   speechSynthesis.cancel();
-  currentlyPlayingId = null;
+  AppState.currentlyPlayingId = null;
 });
