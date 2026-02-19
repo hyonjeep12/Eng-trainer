@@ -1,101 +1,144 @@
-// ===== 데이터 구조 =====
-let sentences = [
-  {
-    id: 1,
-    korean: "제 생각에는",
-    english: "In my opinion,",
-    folders: [1]
-  },
-  {
-    id: 2,
-    korean: "이것은 매우 중요합니다.",
-    english: "This is very important.",
-    folders: [1]
-  },
-  {
-    id: 3,
-    korean: "많은 사람들이 사용합니다.",
-    english: "Many people use it.",
-    folders: [1, 2]
-  },
-  {
-    id: 4,
-    korean: "시간과 비용을 절약할 수 있습니다.",
-    english: "It can save time and money.",
-    folders: [2]
-  },
-  {
-    id: 5,
-    korean: "더 자세히 설명해 주세요.",
-    english: "Could you explain that in more detail?",
-    folders: [1]
-  },
-  {
-    id: 6,
-    korean: "그것은 좋은 생각입니다.",
-    english: "That's a great idea.",
-    folders: [2]
-  },
-  {
-    id: 7,
-    korean: "저도 동의합니다.",
-    english: "I agree with you.",
-    folders: [1, 3]
-  },
-  {
-    id: 8,
-    korean: "어떻게 생각하세요?",
-    english: "What do you think about it?",
-    folders: [3]
-  },
-  {
-    id: 9,
-    korean: "실제로, 그런 경우가 많습니다.",
-    english: "Actually, that's often the case.",
-    folders: [2]
-  },
-  {
-    id: 10,
-    korean: "그래서 우리는 어떻게 해야 할까요?",
-    english: "So what should we do then?",
-    folders: [3]
-  }
-];
+// ===== Supabase 초기화 =====
+const SUPABASE_URL = 'https://gwitlriweyvbkodmzaji.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_FTdFkCz4e2g30OQ6yvyHNQ_bUkb4hha';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let folders = [
-  { id: 1, name: "일상 회화" },
-  { id: 2, name: "비즈니스" },
-  { id: 3, name: "토론 표현" }
-];
-
+// ===== 전역 데이터 =====
+let sentences = [];
+let folders = [];
 let currentFolder = 'all';
 let currentSearchQuery = '';
 let currentlyPlayingId = null;
 let expandedEnglish = {};
+let isLoading = true;
 
 // ===== 초기화 =====
-window.addEventListener('load', () => {
-  loadDataFromStorage();
+window.addEventListener('load', async () => {
+  await loadAllData();
   renderFolders();
   renderSentences();
   setupEventListeners();
+  isLoading = false;
+  console.log('✅ 앱 초기화 완료');
 });
 
-// ===== 저장소 관리 =====
-function loadDataFromStorage() {
-  const savedSentences = localStorage.getItem('sentences');
-  const savedFolders = localStorage.getItem('folders');
-  const savedExpanded = localStorage.getItem('expandedEnglish');
-  
-  if (savedSentences) sentences = JSON.parse(savedSentences);
-  if (savedFolders) folders = JSON.parse(savedFolders);
-  if (savedExpanded) expandedEnglish = JSON.parse(savedExpanded);
+// ===== Supabase에서 모든 데이터 로드 =====
+async function loadAllData() {
+  try {
+    // 1. sentences 로드
+    const { data: sentencesData, error: sentencesError } = await supabase
+      .from('sentences')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (sentencesError) throw sentencesError;
+
+    // 2. folders 로드
+    const { data: foldersData, error: foldersError } = await supabase
+      .from('folders')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (foldersError) throw foldersError;
+
+    // 3. sentence_folders 로드 (관계)
+    const { data: sentenceFoldersData, error: relError } = await supabase
+      .from('sentence_folders')
+      .select('*');
+
+    if (relError) throw relError;
+
+    // 4. 데이터 정리
+    sentences = (sentencesData || []).map(row => ({
+      id: row.id,
+      korean: row.korean || '',
+      english: row.english || '',
+      folders: (sentenceFoldersData || [])
+        .filter(rel => rel.sentence_id === row.id)
+        .map(rel => rel.folder_id)
+    }));
+
+    folders = (foldersData || []).map(row => ({
+      id: row.id,
+      name: row.name || ''
+    }));
+
+    // localStorage에서 확장 상태 복원
+    const saved = localStorage.getItem('expandedEnglish');
+    if (saved) {
+      expandedEnglish = JSON.parse(saved);
+    }
+
+    console.log(`✅ Supabase 데이터 로드: ${sentences.length}개 문장, ${folders.length}개 폴더`);
+  } catch (error) {
+    console.error('❌ 데이터 로드 오류:', error);
+    alert('데이터를 불러올 수 없습니다: ' + error.message);
+  }
 }
 
-function saveDataToStorage() {
-  localStorage.setItem('sentences', JSON.stringify(sentences));
-  localStorage.setItem('folders', JSON.stringify(folders));
-  localStorage.setItem('expandedEnglish', JSON.stringify(expandedEnglish));
+// ===== Supabase에 문장 저장 =====
+async function saveSentence(sentence) {
+  try {
+    // 1. sentences 테이블에 저장
+    const { data: savedSentence, error: sentenceError } = await supabase
+      .from('sentences')
+      .upsert({
+        id: sentence.id,
+        korean: sentence.korean,
+        english: sentence.english
+      })
+      .select();
+
+    if (sentenceError) throw sentenceError;
+
+    // 2. 기존 sentence_folders 삭제
+    const { error: deleteError } = await supabase
+      .from('sentence_folders')
+      .delete()
+      .eq('sentence_id', sentence.id);
+
+    if (deleteError) throw deleteError;
+
+    // 3. 새로운 sentence_folders 생성
+    if (sentence.folders && sentence.folders.length > 0) {
+      const folderRelations = sentence.folders.map(folderId => ({
+        sentence_id: sentence.id,
+        folder_id: folderId
+      }));
+
+      const { error: insertError } = await supabase
+        .from('sentence_folders')
+        .insert(folderRelations);
+
+      if (insertError) throw insertError;
+    }
+
+    console.log('✅ 문장 저장:', sentence.korean);
+  } catch (error) {
+    console.error('❌ 문장 저장 오류:', error);
+    alert('문장 저장 실패: ' + error.message);
+  }
+}
+
+// ===== Supabase에 폴더 저장 =====
+async function saveFolder(folder) {
+  try {
+    const { data, error } = await supabase
+      .from('folders')
+      .upsert({
+        id: folder.id,
+        name: folder.name
+      })
+      .select();
+
+    if (error) throw error;
+
+    console.log('✅ 폴더 저장:', folder.name);
+    return data;
+  } catch (error) {
+    console.error('❌ 폴더 저장 오류:', error);
+    alert('폴더 저장 실패: ' + error.message);
+  }
 }
 
 // ===== 이벤트 리스너 =====
@@ -135,13 +178,13 @@ function renderFolders() {
   folders.forEach(folder => {
     const count = sentences.filter(s => s.folders.includes(folder.id)).length;
     const isActive = currentFolder === folder.id;
-    
+
     const folderItem = document.createElement('div');
     folderItem.className = `folder-item ${isActive ? 'active' : ''}`;
     folderItem.onclick = () => filterByFolder(folder.id);
     folderItem.innerHTML = `
       <span class="folder-icon">📁</span>
-      <span>${folder.name}</span>
+      <span>${escapeHtml(folder.name)}</span>
       <span style="font-size: 12px; margin-left: auto; color: #999;">${count}</span>
     `;
     folderList.appendChild(folderItem);
@@ -153,7 +196,7 @@ function filterByFolder(folderId) {
   currentFolder = folderId;
   currentSearchQuery = '';
   document.getElementById('searchInput').value = '';
-  
+
   // 사이드패널에서 활성 상태 업데이트
   document.querySelectorAll('.folder-item').forEach(item => {
     item.classList.remove('active');
@@ -170,7 +213,7 @@ function filterByFolder(folderId) {
   closeSidebar();
 }
 
-// ===== 문장 필터링 및 렌더링 =====
+// ===== 문장 필터링 =====
 function getFilteredSentences() {
   let filtered = sentences;
 
@@ -191,6 +234,7 @@ function getFilteredSentences() {
   return filtered;
 }
 
+// ===== 문장 렌더링 =====
 function renderSentences() {
   const sentenceList = document.getElementById('sentenceList');
   const filtered = getFilteredSentences();
@@ -210,7 +254,7 @@ function renderSentences() {
   sentenceList.innerHTML = filtered.map(sentence => `
     <div class="sentence-card">
       <div class="korean-text">${escapeHtml(sentence.korean)}</div>
-      
+
       <div class="sentence-actions">
         <button class="toggle-btn" onclick="toggleEnglish(${sentence.id})">
           <span>${expandedEnglish[sentence.id] ? '▼ 영어 숨기기' : '▶ 영어 보기'}</span>
@@ -233,7 +277,7 @@ function renderSentences() {
 // ===== 영어 보기 토글 =====
 function toggleEnglish(sentenceId) {
   expandedEnglish[sentenceId] = !expandedEnglish[sentenceId];
-  saveDataToStorage();
+  localStorage.setItem('expandedEnglish', JSON.stringify(expandedEnglish));
   renderSentences();
 }
 
@@ -285,7 +329,7 @@ function openFolderModal(sentenceId) {
         <div class="checkbox ${isChecked ? 'checked' : ''}">
           ${isChecked ? '✓' : ''}
         </div>
-        <span class="folder-check-label">${folder.name}</span>
+        <span class="folder-check-label">${escapeHtml(folder.name)}</span>
       </div>
     `;
   }).join('');
@@ -293,7 +337,7 @@ function openFolderModal(sentenceId) {
   modalOverlay.classList.add('active');
 }
 
-function toggleFolderForSentence(folderId) {
+async function toggleFolderForSentence(folderId) {
   const sentence = sentences.find(s => s.id === currentSentenceForFolder);
   if (!sentence) return;
 
@@ -304,9 +348,13 @@ function toggleFolderForSentence(folderId) {
     sentence.folders.push(folderId);
   }
 
-  saveDataToStorage();
-  openFolderModal(currentSentenceForFolder);
+  // Supabase에 저장
+  await saveSentence(sentence);
+
+  // UI 업데이트
   renderFolders();
+  renderSentences();
+  openFolderModal(currentSentenceForFolder);
 }
 
 // ===== 새 폴더 생성 모달 =====
@@ -318,7 +366,7 @@ function openNewFolderModal() {
   modalOverlay.classList.add('active');
 }
 
-function createNewFolder() {
+async function createNewFolder() {
   const input = document.getElementById('newFolderInput');
   const folderName = input.value.trim();
 
@@ -327,17 +375,33 @@ function createNewFolder() {
     return;
   }
 
-  if (folderName.length > 20) {
-    alert('폴더 이름은 20자 이내여야 합니다.');
+  if (folderName.length > 50) {
+    alert('폴더 이름은 50자 이내여야 합니다.');
     return;
   }
 
-  const newId = Math.max(...folders.map(f => f.id), 0) + 1;
-  folders.push({ id: newId, name: folderName });
+  try {
+    // Supabase에 새 폴더 생성
+    const { data, error } = await supabase
+      .from('folders')
+      .insert({ name: folderName })
+      .select();
 
-  saveDataToStorage();
-  renderFolders();
-  closeModal();
+    if (error) throw error;
+
+    // 로컬 폴더 목록에 추가
+    const newFolder = data[0];
+    folders.push(newFolder);
+
+    console.log('✅ 폴더 생성:', folderName);
+
+    // UI 업데이트
+    renderFolders();
+    closeModal();
+  } catch (error) {
+    console.error('❌ 폴더 생성 오류:', error);
+    alert('폴더 생성 실패: ' + error.message);
+  }
 }
 
 // ===== 모달 닫기 =====
