@@ -429,7 +429,10 @@ async function createNewFolder() {
     if (error) throw error;
 
     // 로컬 폴더 목록에 추가
-    const newFolder = data[0];
+    const newFolder = {
+      id: data[0].id,
+      name: data[0].id  // id를 name으로 사용 (기존 로드 방식과 일관성)
+    };
     AppState.folders.push(newFolder);
 
     console.log('✅ 폴더 생성:', folderName);
