@@ -166,14 +166,13 @@ async function saveFolder(folder) {
     const { data, error } = await AppState.supabase
       .from('folders')
       .upsert({
-        id: folder.id,
-        name: folder.name
+        id: folder.id
       })
       .select();
 
     if (error) throw error;
 
-    console.log('✅ 폴더 저장:', folder.name);
+    console.log('✅ 폴더 저장:', folder.id);
     return data;
   } catch (error) {
     console.error('❌ 폴더 저장 오류:', error);
@@ -424,7 +423,7 @@ async function createNewFolder() {
     // Supabase에 새 폴더 생성
     const { data, error } = await AppState.supabase
       .from('folders')
-      .insert({ name: folderName })
+      .insert({ id: folderName })
       .select();
 
     if (error) throw error;
