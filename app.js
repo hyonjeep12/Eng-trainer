@@ -1,7 +1,14 @@
 // ===== Supabase 초기화 =====
 const SUPABASE_URL = 'https://gwitlriweyvbkodmzaji.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_FTdFkCz4e2g30OQ6yvyHNQ_bUkb4hha';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let supabase = null;
+
+// Supabase 클라이언트 안전하게 초기화
+if (typeof window.supabase !== 'undefined') {
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+} else {
+  console.error('❌ Supabase 라이브러리가 로드되지 않았습니다');
+}
 
 // ===== 전역 데이터 =====
 let sentences = [];
@@ -24,6 +31,11 @@ window.addEventListener('load', async () => {
 
 // ===== Supabase에서 모든 데이터 로드 =====
 async function loadAllData() {
+  if (!supabase) {
+    console.error('❌ Supabase가 초기화되지 않았습니다');
+    return;
+  }
+
   try {
     // 1. sentences 로드
     const { data: sentencesData, error: sentencesError } = await supabase
