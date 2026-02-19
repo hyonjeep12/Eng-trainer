@@ -203,6 +203,15 @@ function setupEventListeners() {
       handleSearch();
     }
   });
+
+  // 폴더 모달의 이벤트 위임
+  document.getElementById('folderListModal').addEventListener('click', (e) => {
+    const folderCheckItem = e.target.closest('.folder-check-item');
+    if (folderCheckItem) {
+      const folderId = folderCheckItem.getAttribute('data-folder-id');
+      toggleFolderForSentence(folderId);
+    }
+  });
 }
 
 // ===== 사이드패널 토글 =====
@@ -373,7 +382,7 @@ function openFolderModal(sentenceId) {
   folderListModal.innerHTML = AppState.folders.map(folder => {
     const isChecked = sentence.folders.includes(folder.id);
     return `
-      <div class="folder-check-item" onclick="toggleFolderForSentence(${folder.id})">
+      <div class="folder-check-item" data-folder-id="${folder.id}">
         <div class="checkbox ${isChecked ? 'checked' : ''}">
           ${isChecked ? '✓' : ''}
         </div>
