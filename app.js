@@ -54,8 +54,7 @@ async function loadAllData() {
     // 1. sentences 로드
     const { data: sentencesData, error: sentencesError } = await AppState.supabase
       .from('sentences')
-      .select('*')
-      .order('id', { ascending: true });
+      .select('*');
 
     console.log('📊 sentencesData:', sentencesData, 'error:', sentencesError);
 
@@ -64,8 +63,7 @@ async function loadAllData() {
     // 2. folders 로드
     const { data: foldersData, error: foldersError } = await AppState.supabase
       .from('folders')
-      .select('*')
-      .order('id', { ascending: true });
+      .select('*');
 
     console.log('📂 foldersData:', foldersData, 'error:', foldersError);
 
