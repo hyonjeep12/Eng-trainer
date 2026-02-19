@@ -32,6 +32,15 @@ function updateState(updates) {
   ({supabase, sentences, folders, currentFolder, currentSearchQuery, currentlyPlayingId, expandedEnglish} = AppState);
 }
 
+// ===== PWA Service Worker 등록 =====
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    console.log('✅ Service Worker 등록됨');
+  }).catch(err => {
+    console.log('⚠️ Service Worker 등록 실패:', err);
+  });
+}
+
 // ===== 초기화 =====
 window.addEventListener('load', async () => {
   initSupabase();
