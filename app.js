@@ -25,7 +25,7 @@ function initSupabase() {
 }
 
 // 변수 단축 (편의상)
-let {supabase, sentences, folders, currentFolder, currentSearchQuery, currentlyPlayingId, expandedEnglish} = AppState;
+let { sentences, folders, currentFolder, currentSearchQuery, currentlyPlayingId, expandedEnglish } = AppState;
 
 function updateState(updates) {
   Object.assign(AppState, updates);
