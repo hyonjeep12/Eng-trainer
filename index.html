@@ -152,6 +152,9 @@
 
     /* ===== 토글 버튼 ===== */
     .sidebar-toggle {
+      position: fixed;
+      top: 16px;
+      left: 16px;
       width: 44px;
       height: 44px;
       background: white;
@@ -162,6 +165,7 @@
       align-items: center;
       justify-content: center;
       font-size: 20px;
+      z-index: 999;
       transition: all 0.2s ease;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
       flex-shrink: 0;
@@ -176,6 +180,7 @@
       padding: 12px 16px;
       background: white;
       border-bottom: 1px solid #e8eef7;
+      margin-top: 60px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
